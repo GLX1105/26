@@ -164,7 +164,7 @@ input[type="number"].small-input {width:50px;padding:3px 5px;border:1px solid #d
 .config-label.long-label {width:70px;}
 .config-colon {width:6px;font-size:12px;}
 .config-input {flex:1;height:22px;padding:2px 5px;font-size:12px;border:1px solid #ccc;border-radius:3px;}
-.data-config-actions {margin-top:8px;display:flex;justify-content:flex-end;gap:5px;}
+.data-config-actions {margin-top:8px;display:flex;justify-content:flex-end;gap:5px;flex-wrap:wrap;}
 .config-btn {padding:5px 10px;font-size:12px;border-radius:3px;cursor:pointer;transition:all 0.25s ease;box-shadow:0 1px 3px rgba(0,0,0,0.1);}
 .config-btn:hover {transform:translateY(-2px);box-shadow:0 3px 6px rgba(0,0,0,0.12);}
 .config-btn:active {transform:translateY(1px);box-shadow:0 1px 2px rgba(0,0,0,0.08);}
@@ -419,7 +419,7 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
   <p><span class="label">剩余空间：</span><span class="value" id="freeSpace">50 MB</span></p>
 </div>
 
-<!-- 数据库弹窗：静态HTML，包含所有默认分类及号码，并增加自定义分类容器 -->
+<!-- 数据库弹窗（静态分类 + 动态自定义分类容器） -->
 <div class="database-modal" id="databaseModal" style="display:none;">
   <div class="database-modal-box" id="databaseModalBox">
     <div class="database-modal-header" id="databaseModalHeader"><h3>📊 数据库配置</h3><div class="window-controls"><button onclick="maximizeWindow('databaseModalBox')" title="最大化">🗖</button><button onclick="pinWindow('databaseModalBox')" title="置顶">📌</button><button class="close-database-btn" onclick="hideDatabase()">×</button></div></div>
@@ -599,8 +599,8 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
           <div class="config-item"><div class="config-label long-label">4头双</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_tds_4shuang" value="40 42 44 46 48"></div>
         </div>
 
-        <!-- 自定义分类容器 -->
-        <div id="customCategoriesContainer"></div>
+        <!-- 动态自定义分类容器 -->
+        <div id="customConfigContainer"></div>
 
         <div class="data-config-actions">
           <button class="config-btn" style="background:#007bff;color:white" onclick="enableEditConfig()">修改</button>
@@ -657,8 +657,7 @@ let highestZ = 2000;
 function makeWindowDraggable(winId) { const win = document.getElementById(winId); if (!win) return; const header = win.querySelector('.modal-header') || win.querySelector('.database-modal-header'); if (!header) return; let isDragging = false, startX, startY, startLeft, startTop; header.addEventListener('mousedown', (e) => { if (e.target.closest('.window-controls')) return; isDragging = true; const rect = win.getBoundingClientRect(); startX = e.clientX; startY = e.clientY; startLeft = rect.left; startTop = rect.top; win.style.cursor = 'grabbing'; e.preventDefault(); }); document.addEventListener('mousemove', (e) => { if (!isDragging) return; const dx = e.clientX - startX; const dy = e.clientY - startY; win.style.left = (startLeft + dx) + 'px'; win.style.top = (startTop + dy) + 'px'; win.style.transform = 'none'; }); document.addEventListener('mouseup', () => { if (isDragging) { isDragging = false; win.style.cursor = ''; } }); win.addEventListener('mousedown', () => { highestZ += 1; win.style.zIndex = highestZ; }); }
 function maximizeWindow(winId) { const win = document.getElementById(winId); if (!win) return; if (win.style.width === '100vw' && win.style.height === '100vh') { win.style.width = ''; win.style.height = ''; win.style.left = '50%'; win.style.top = '50%'; win.style.transform = 'translate(-50%, -50%)'; } else { win.style.width = '100vw'; win.style.height = '100vh'; win.style.left = '0'; win.style.top = '0'; win.style.transform = 'none'; } }
 function pinWindow(winId) { const win = document.getElementById(winId); if (!win) return; highestZ += 1; win.style.zIndex = highestZ; showToast('窗口已置顶'); }
-</script>
-// ===== 识别弹窗 =====
+    // ===== 识别弹窗 =====
 function showRecognizeModal() {
   if (document.getElementById('recognizeWin')) return;
   const win = document.createElement('div'); win.className = 'floating-window'; win.id = 'recognizeWin';
@@ -690,75 +689,13 @@ function showRecognizeModal() {
   makeWindowDraggable('recognizeWin'); highestZ += 1; win.style.zIndex = highestZ;
 }
 
-// ===== 自定义分类数据管理 =====
-const CUSTOM_CATEGORIES_KEY = 'customConfigCategoriesV2';
-function loadCustomCategories() {
-  try { return JSON.parse(localStorage.getItem(CUSTOM_CATEGORIES_KEY) || '[]'); } catch (e) { return []; }
-}
-function saveCustomCategories(cats) {
-  localStorage.setItem(CUSTOM_CATEGORIES_KEY, JSON.stringify(cats));
-}
-
-// 渲染自定义分类区域
-function renderCustomCategories() {
-  const container = document.getElementById('customCategoriesContainer');
-  if (!container) return;
-  const cats = loadCustomCategories();
-  let html = '';
-  if (cats.length > 0) {
-    html += '<div class="config-section"><div class="config-section-title">自定义分类</div>';
-    cats.forEach((cat, idx) => {
-      html += `<div class="config-item"><div class="config-label">${cat.label}</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_custom_${idx}" value="${cat.value || ''}"><button onclick="deleteCustomCategoryByIndex(${idx})" style="margin-left:5px;background:#dc3545;color:#fff;border:none;border-radius:3px;padding:2px 5px;">删</button></div>`;
-    });
-    html += '</div>';
-  }
-  container.innerHTML = html;
-}
-
-// 添加自定义分类
-async function addCustomCategory() {
-  const label = await prompt('请输入新分类名称（如：大尾）');
-  if (!label) return;
-  const value = await prompt(`请输入“${label}”对应的号码（空格分隔）`);
-  if (value === null) return;
-  const cats = loadCustomCategories();
-  cats.push({ label, value: value.trim() });
-  saveCustomCategories(cats);
-  renderCustomCategories();
-  showToast('自定义分类已添加，请点击“保存”按钮存储配置');
-}
-
-// 删除自定义分类（通过弹窗选择）
-async function deleteCustomCategory() {
-  const cats = loadCustomCategories();
-  if (cats.length === 0) { showToast('没有可删除的自定义分类'); return; }
-  const labels = cats.map((c,i) => `${i+1}. ${c.label}`).join('\n');
-  const idxStr = await prompt(`请输入要删除的分类编号：\n${labels}`);
-  if (!idxStr) return;
-  const idx = parseInt(idxStr) - 1;
-  if (isNaN(idx) || idx < 0 || idx >= cats.length) { showToast('无效编号'); return; }
-  cats.splice(idx, 1);
-  saveCustomCategories(cats);
-  renderCustomCategories();
-  showToast('自定义分类已删除，请点击“保存”按钮使更改生效');
-}
-
-// 通过内联按钮删除指定索引的分类
-function deleteCustomCategoryByIndex(index) {
-  const cats = loadCustomCategories();
-  cats.splice(index, 1);
-  saveCustomCategories(cats);
-  renderCustomCategories();
-}
-
-// ===== 数据库配置读取/保存（基于静态HTML input + 自定义分类） =====
+// ===== 数据库配置读写（基于静态HTML input，并支持自定义分类） =====
 function getAllConfigData() {
   const configData = {
     zodiac:{}, shengxiaoAttr:{}, wuxing:{}, bose:{}, banbo:{}, danshuang:{}, weishu:{},
     daxiaodanshuang:{}, daxiao:{}, heshu:{}, toushu:{}, menshu:{}, duanwei:{},
     hedahexiao:{}, weidaweixiao:{}, hewei:{}, heshudanshuang:{}, toushuDanshuang:{}
   };
-  // 直接通过ID读取静态input的值
   const ids = {
     zodiac: { shu:'鼠', niu:'牛', hu:'虎', tu2:'兔', long:'龙', she:'蛇', ma:'马', yang:'羊', hou:'猴', ji:'鸡', gou:'狗', zhu:'猪' },
     shengxiaoAttr: { sx_jiaqin:'家禽', sx_yeshou:'野兽', sx_jimei:'吉美', sx_xiongchou:'凶丑', sx_yinxing:'阴性', sx_yangxing:'阳性', sx_tianxiao:'天肖', sx_dixiao:'地肖', sx_danbi:'单笔', sx_shuangbi:'双笔', sx_baibian:'白边' },
@@ -773,25 +710,16 @@ function getAllConfigData() {
     hewei: {}, heshudanshuang: { hsd_hsd:'合数单', hsd_hss:'合数双' },
     toushuDanshuang: {}
   };
-  // 尾数 ws_0 ~ ws_9
   for (let i = 0; i <= 9; i++) ids.weishu[`ws_${i}`] = `${i}尾`;
-  // 合数 hs_01 ~ hs_13
   for (let i = 1; i <= 13; i++) ids.heshu[`hs_${i.toString().padStart(2,'0')}`] = `${i}合`;
-  // 头数 ts_0 ~ ts_4
   for (let i = 0; i <= 4; i++) ids.toushu[`ts_${i}`] = `${i}头`;
-  // 门数 ms_1 ~ ms_5
   for (let i = 1; i <= 5; i++) ids.menshu[`ms_${i}`] = `${i}门`;
-  // 段位 dw_1 ~ dw_7
   for (let i = 1; i <= 7; i++) ids.duanwei[`dw_${i}`] = `${i}段`;
-  // 合尾 hw_0 ~ hw_9
   for (let i = 0; i <= 9; i++) ids.hewei[`hw_${i}`] = `${i}合尾`;
-  // 头数单双 tds_0dan, tds_0shuang ... tds_4dan, tds_4shuang
   for (let i = 0; i <= 4; i++) {
     ids.toushuDanshuang[`tds_${i}dan`] = `${i}头单`;
     ids.toushuDanshuang[`tds_${i}shuang`] = `${i}头双`;
   }
-
-  // 遍历所有分类读取input值
   for (const [group, groupIds] of Object.entries(ids)) {
     for (const [id, label] of Object.entries(groupIds)) {
       const el = document.getElementById(`config_${id}`);
@@ -808,26 +736,23 @@ function getAllConfigData() {
       }
     }
   }
-
   // 读取自定义分类
   const customCats = loadCustomCategories();
   customCats.forEach((cat, idx) => {
     const el = document.getElementById(`config_custom_${idx}`);
     if (el) {
       const val = el.value.trim();
-      configData.weishu[cat.label] = val.split(/\s+/).filter(n => /^\d+$/.test(n));
+      configData.weishu[cat.label] = val.split(/\s+/).filter(n => /^\d+$/.test(n)); // 暂时归入尾数类
     }
   });
-
   return configData;
 }
 
-// 数据库显示/隐藏
 async function showDatabase() {
   const pwd = await prompt("请输入数据库密码：","");
   if (pwd === PASSWORD) {
     document.getElementById('databaseModal').style.display = 'flex';
-    renderCustomCategories(); // 恢复自定义分类
+    renderCustomConfigContainer(); // 渲染自定义分类区域
     makeWindowDraggable('databaseModalBox');
   } else {
     await alert("密码错误");
@@ -835,16 +760,10 @@ async function showDatabase() {
 }
 function hideDatabase() { document.getElementById('databaseModal').style.display = 'none'; }
 
-// 锁定/解锁输入框
 function lockAllInputs() { document.querySelectorAll('.config-input').forEach(el => el.disabled = true); }
 function unlockAllInputs() { document.querySelectorAll('.config-input').forEach(el => el.disabled = false); }
+function initDataConfig() { lockAllInputs(); renderCustomConfigContainer(); }
 
-// 初始化时锁定输入框（在页面启动时调用）
-function initDataConfig() {
-  lockAllInputs();
-}
-
-// 修改按钮：解锁输入框
 async function enableEditConfig() {
   if ((await prompt("输入修改密码：")) === PASSWORD) {
     unlockAllInputs();
@@ -854,40 +773,79 @@ async function enableEditConfig() {
   }
 }
 
-// 保存按钮：读取所有输入框值并存储到localStorage，同时保存自定义分类
 async function saveDataConfig() {
-  if ((await prompt("输入保存密码：")) !== PASSWORD) {
-    showToast("密码错误");
-    return;
-  }
+  if ((await prompt("输入保存密码：")) !== PASSWORD) { showToast("密码错误"); return; }
   const newConfig = {};
   document.querySelectorAll('.config-input').forEach(el => {
     const id = el.id.replace('config_', '');
-    newConfig[id] = el.value.trim();
+    if (!id.startsWith('custom_')) newConfig[id] = el.value.trim();
   });
   localStorage.setItem('customDataConfigObj', JSON.stringify(newConfig));
-
-  // 同时保存自定义分类的值（已经由 renderCustomCategories 保持，但这里确保同步）
+  // 同步保存自定义分类的值
   const cats = loadCustomCategories();
-  cats.forEach((cat, idx) => {
-    const el = document.getElementById(`config_custom_${idx}`);
-    if (el) cat.value = el.value.trim();
+  cats.forEach((c, i) => {
+    const el = document.getElementById(`config_custom_${i}`);
+    if (el) c.value = el.value.trim();
   });
   saveCustomCategories(cats);
-
   lockAllInputs();
   showToast("保存成功");
 }
 
-// 默认按钮：恢复默认值并清空自定义分类
 async function resetDataConfig() {
-  if ((await prompt("输入密码：")) !== PASSWORD) {
-    showToast("密码错误");
-    return;
-  }
+  if ((await prompt("输入密码：")) !== PASSWORD) { showToast("密码错误"); return; }
   localStorage.removeItem('customDataConfigObj');
-  saveCustomCategories([]);
   location.reload();
+}
+
+// ===== 自定义分类管理 =====
+function loadCustomCategories() { try { return JSON.parse(localStorage.getItem('customConfigCategories') || '[]'); } catch(e) { return []; } }
+function saveCustomCategories(cats) { localStorage.setItem('customConfigCategories', JSON.stringify(cats)); }
+
+function renderCustomConfigContainer() {
+  const container = document.getElementById('customConfigContainer');
+  if (!container) return;
+  const cats = loadCustomCategories();
+  if (cats.length === 0) { container.innerHTML = ''; return; }
+  let html = `<div class="config-section"><div class="config-section-title">自定义分类</div>`;
+  cats.forEach((cat, idx) => {
+    html += `<div class="config-item"><div class="config-label">${cat.label}</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_custom_${idx}" value="${cat.value || ''}"><button onclick="deleteCustomCategoryByIndex(${idx})" style="margin-left:5px;background:#dc3545;color:#fff;border:none;border-radius:3px;padding:2px 5px;">删</button></div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+async function addCustomCategory() {
+  const label = await prompt('请输入新分类名称（如：大尾）');
+  if (!label) return;
+  const value = await prompt(`请输入“${label}”对应的号码（空格分隔）`);
+  if (value === null) return;
+  const cats = loadCustomCategories();
+  cats.push({ label, value: value.trim() });
+  saveCustomCategories(cats);
+  renderCustomConfigContainer();
+  showToast('自定义分类已添加，请点击“保存”按钮存储配置');
+}
+
+async function deleteCustomCategory() {
+  const cats = loadCustomCategories();
+  if (cats.length === 0) { showToast('没有可删除的自定义分类'); return; }
+  const labels = cats.map((c,i) => `${i+1}. ${c.label}`).join('\n');
+  const idxStr = await prompt(`请输入要删除的分类编号：\n${labels}`);
+  if (!idxStr) return;
+  const idx = parseInt(idxStr) - 1;
+  if (isNaN(idx) || idx < 0 || idx >= cats.length) { showToast('无效编号'); return; }
+  cats.splice(idx, 1);
+  saveCustomCategories(cats);
+  renderCustomConfigContainer();
+  showToast('自定义分类已删除，请点击“保存”按钮使更改生效');
+}
+
+function deleteCustomCategoryByIndex(index) {
+  const cats = loadCustomCategories();
+  cats.splice(index, 1);
+  saveCustomCategories(cats);
+  renderCustomConfigContainer();
 }
 
 // ===== 订单变量与基础函数 =====
@@ -908,7 +866,6 @@ function buildZodiacMap(startZodiac) { const map = {}; const startIndex = zodiac
 async function changeStartZodiac() { const select = document.getElementById('startZodiacSelect'); const newZodiac = select.value; const savedZodiac = localStorage.getItem('selectedStartZodiac') || '马'; if (newZodiac === savedZodiac) return; const inputPwd = await prompt("请输入本年生肖切换密码：", ""); if (inputPwd !== YEAR_ZODIAC_PASSWORD) { await alert("密码错误"); select.value = savedZodiac; return; } localStorage.setItem('selectedStartZodiac', newZodiac); currentZodiacMap = buildZodiacMap(newZodiac); refreshAll(); }
 function switchRiskReport() { const val = document.getElementById('riskReportSwitcher').value; if (val === 'total') { document.getElementById('riskSection').style.display = ''; document.getElementById('reportSection').style.display = 'none'; document.getElementById('viewUserSelect').style.display = 'none'; generateRiskTable(); } else if (val === 'user') { document.getElementById('riskSection').style.display = ''; document.getElementById('reportSection').style.display = 'none'; document.getElementById('viewUserSelect').style.display = 'inline-block'; generateRiskTable(); } else if (val === 'report') { document.getElementById('riskSection').style.display = 'none'; document.getElementById('reportSection').style.display = ''; generateReportTable(); } }
 
-// IndexedDB
 function initIndexedDB() { return new Promise((resolve) => { const request = indexedDB.open(DB_NAME, DB_VERSION); request.onerror = () => { resolve(false); }; request.onsuccess = (event) => { db = event.target.result; resolve(true); }; request.onupgradeneeded = (event) => { db = event.target.result; if (!db.objectStoreNames.contains(STORE_NAME)) db.createObjectStore(STORE_NAME, { keyPath: 'id' }); if (!db.objectStoreNames.contains(REPORT_STORE_NAME)) db.createObjectStore(REPORT_STORE_NAME, { keyPath: 'id' }); }; }); }
 async function getOrderRecords() { return new Promise((resolve) => { if (!db) resolve([]); const tx = db.transaction([STORE_NAME],'readonly'); const store = tx.objectStore(STORE_NAME); const req = store.getAll(); req.onsuccess = (e) => resolve(e.target.result || []); }); }
 async function getReportOrderRecords() { return new Promise((resolve) => { if (!db) resolve([]); const tx = db.transaction([REPORT_STORE_NAME],'readonly'); const store = tx.objectStore(REPORT_STORE_NAME); const req = store.getAll(); req.onsuccess = (e) => resolve(e.target.result || []); }); }
