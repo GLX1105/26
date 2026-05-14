@@ -672,7 +672,7 @@ function showRecognizeModal() {
   makeWindowDraggable('recognizeWin'); highestZ += 1; win.style.zIndex = highestZ;
 }
 
-// ===== 数据库配置（动态渲染，保留所有原始分类数据） =====
+// ===== 数据库配置（动态渲染，已修复默认号码显示） =====
 const SYSTEM_CATEGORIES = [
   { id: 'shu', label: '鼠', group: '十二生肖' }, { id: 'niu', label: '牛', group: '十二生肖' }, { id: 'hu', label: '虎', group: '十二生肖' }, { id: 'tu2', label: '兔', group: '十二生肖' }, { id: 'long', label: '龙', group: '十二生肖' }, { id: 'she', label: '蛇', group: '十二生肖' },
   { id: 'ma', label: '马', group: '十二生肖' }, { id: 'yang', label: '羊', group: '十二生肖' }, { id: 'hou', label: '猴', group: '十二生肖' }, { id: 'ji', label: '鸡', group: '十二生肖' }, { id: 'gou', label: '狗', group: '十二生肖' }, { id: 'zhu', label: '猪', group: '十二生肖' },
@@ -728,19 +728,29 @@ function saveCustomCategories(cats) { localStorage.setItem('customConfigCategori
 
 function renderConfigContainer() {
   const container = document.getElementById('configContainer'); if (!container) return;
-  const cfg = getAllConfigDataFromInputs();
+  // 合并默认配置与用户保存的配置，确保首次打开即显示号码
+  let savedConfig = {};
+  try { const saved = localStorage.getItem('customDataConfigObj'); if(saved) savedConfig = JSON.parse(saved); } catch(e) {}
+  const mergedConfig = { ...DEFAULT_CONFIG, ...savedConfig };
+
   let html = '';
   const groups = {};
   SYSTEM_CATEGORIES.forEach(c => { if (!groups[c.group]) groups[c.group] = []; groups[c.group].push(c); });
   for (const group in groups) {
     html += `<div class="config-section"><div class="config-section-title">${group}</div>`;
-    groups[group].forEach(c => { const val = cfg[c.id] || ''; html += `<div class="config-item"><div class="config-label">${c.label}</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_${c.id}" value="${val}"></div>`; });
+    groups[group].forEach(c => {
+      const val = mergedConfig[c.id] || '';
+      html += `<div class="config-item"><div class="config-label">${c.label}</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_${c.id}" value="${val}"></div>`;
+    });
     html += `</div>`;
   }
+  // 自定义分类
   const customCats = loadCustomCategories();
   if (customCats.length > 0) {
     html += `<div class="config-section"><div class="config-section-title">自定义分类</div>`;
-    customCats.forEach((cat, idx) => { html += `<div class="config-item"><div class="config-label">${cat.label}</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_custom_${idx}" value="${cat.value || ''}"><button onclick="deleteCustomCategoryByIndex(${idx})" style="margin-left:5px;background:#dc3545;color:#fff;border:none;border-radius:3px;padding:2px 5px;">删</button></div>`; });
+    customCats.forEach((cat, idx) => {
+      html += `<div class="config-item"><div class="config-label">${cat.label}</div><div class="config-colon">：</div><input type="text" class="config-input" id="config_custom_${idx}" value="${cat.value || ''}"><button onclick="deleteCustomCategoryByIndex(${idx})" style="margin-left:5px;background:#dc3545;color:#fff;border:none;border-radius:3px;padding:2px 5px;">删</button></div>`;
+    });
     html += `</div>`;
   }
   container.innerHTML = html;
