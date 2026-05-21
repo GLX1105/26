@@ -717,6 +717,7 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
     </div>
   </div>
 </div>
+
 <script>
 // ===== 自定义对话框系统 =====
 function showCustomDialog({ title = '提示', message = '', type = 'alert', defaultValue = '', placeholder = '' }) {
@@ -907,36 +908,39 @@ function tokenizeAndJoin(content) {
   return allKeywords.join('-');
 }
 
-// ===== 从原始行中提取无效字符（只返回无效字符的红色HTML片段） =====
+// ===== 从原始行中提取无效字符（只检查金额指示符前面的投注内容） =====
 function extractInvalidChars(line, cfg, vc) {
   const HARD_AMP_LIST = ['各','各号','号','个','=','各数','每数','每号','个号','每个号','各码','各号码'];
   const cusAmp = getCustomAmountPrefixes();
   const allAmps = [...HARD_AMP_LIST, ...cusAmp];
   allAmps.sort((a,b) => b.length - a.length);
+
+  // 找到第一个金额指示符的位置，只分析前面的投注内容
+  let ampIndex = line.length;
+  for (const amp of allAmps) {
+    const idx = line.indexOf(amp);
+    if (idx !== -1 && idx < ampIndex) {
+      ampIndex = idx;
+    }
+  }
+  const betPart = line.substring(0, ampIndex);
+
   const baseSuf = '元块咪米斤#،';
   const cusAmtSuf = getCustomAmountSuffixes();
   const amtSufSet = new Set([...baseSuf.split(''), ...cusAmtSuf]);
 
   const invalids = [];
   let i = 0;
-  while (i < line.length) {
-    const ch = line[i];
+  while (i < betPart.length) {
+    const ch = betPart[i];
+    // 跳过分隔符
     if (/[\s,，.。、+\-*＊\/\\|]/.test(ch)) { i++; continue; }
-    let matchedAmp = false;
-    for (const amp of allAmps) {
-      if (line.substring(i, i + amp.length) === amp) {
-        i += amp.length;
-        matchedAmp = true;
-        break;
-      }
-    }
-    if (matchedAmp) continue;
-    if (amtSufSet.has(ch)) { i++; continue; }
+    // 处理数字
     if (/\d/.test(ch)) {
       let numStr = '';
       let j = i;
-      while (j < line.length && /\d/.test(line[j])) {
-        numStr += line[j];
+      while (j < betPart.length && /\d/.test(betPart[j])) {
+        numStr += betPart[j];
         j++;
       }
       const num = parseInt(numStr);
@@ -946,11 +950,22 @@ function extractInvalidChars(line, cfg, vc) {
       i = j;
       continue;
     }
+    // 处理汉字
     if (/[\u4e00-\u9fa5]/.test(ch)) {
-      if (!vc.has(ch)) {
-        invalids.push(`<span style="color:red;">${ch}</span>`);
+      // 尝试最长匹配有效分类名
+      let matched = false;
+      for (let len = Math.min(4, betPart.length - i); len >= 1; len--) {
+        const sub = betPart.substring(i, i + len);
+        if (vc.has(sub)) {
+          i += len;
+          matched = true;
+          break;
+        }
       }
-      i++;
+      if (!matched) {
+        invalids.push(`<span style="color:red;">${ch}</span>`);
+        i++;
+      }
       continue;
     }
     i++;
@@ -958,19 +973,29 @@ function extractInvalidChars(line, cfg, vc) {
   return invalids;
 }
 
-// ===== 检测一行是否存在无效字符 =====
+// ===== 检测一行投注内容是否存在无效字符 =====
 function hasInvalidChars(line, cfg, vc) {
-  let cleaned = line.replace(/[\s,，.。、+\-*＊\/\\|]+/g, '');
   const HARD_AMP_LIST = ['各','各号','号','个','=','各数','每数','每号','个号','每个号','各码','各号码'];
   const cusAmp = getCustomAmountPrefixes();
   const allAmps = [...HARD_AMP_LIST, ...cusAmp];
   allAmps.sort((a,b) => b.length - a.length);
-  const baseSuf = '元块咪米斤#،';
-  const cusAmtSuf = getCustomAmountSuffixes();
-  const allAmtChars = [...new Set([...baseSuf.split(''), ...cusAmtSuf])].join('');
-  allAmps.forEach(amp => { cleaned = cleaned.split(amp).join(''); });
-  for (const ch of allAmtChars) { cleaned = cleaned.split(ch).join(''); }
+
+  // 找到第一个金额指示符的位置
+  let ampIndex = line.length;
+  for (const amp of allAmps) {
+    const idx = line.indexOf(amp);
+    if (idx !== -1 && idx < ampIndex) {
+      ampIndex = idx;
+    }
+  }
+  let cleaned = line.substring(0, ampIndex);
+
+  // 去掉分隔符和标点
+  cleaned = cleaned.replace(/[\s,，.。、+\-*＊\/\\|]+/g, '');
+  // 去掉数字
   cleaned = cleaned.replace(/\d+/g, '');
+
+  // 检查剩余汉字是否能被有效分类名完全覆盖
   let remaining = cleaned;
   while (remaining.length > 0) {
     let matched = false;
@@ -982,7 +1007,7 @@ function hasInvalidChars(line, cfg, vc) {
         break;
       }
     }
-    if (!matched) return true;
+    if (!matched) return true; // 存在无法匹配的汉字
   }
   return false;
 }
@@ -1233,7 +1258,7 @@ function applyReplacePresets(text) { const p=getReplacePresets(); let r=text; p.
 // ===== 语义转换 =====
 async function semanticReplace() { const ta=document.querySelector('.source-order-input'); if(!ta)return; const s=ta.selectionStart,e=ta.selectionEnd; if(s===e){showToast('请先选择文本');return;} const sel=ta.value.substring(s,e); const cfg=getAllConfigData(); const vc=getAllValidCategories(cfg); const tokens=sel.split(/[\s,，.。、+\-*＊\/\\|]+/).filter(t=>t.trim()); const matched=tokens.filter(t=>vc.has(t)); if(!matched.length){showToast('未识别有效分类');return;} let sets=matched.map(cat=>{ let nums=[]; if(cfg.shengxiaoAttr[cat]){ cfg.shengxiaoAttr[cat].forEach(z=>{ if(cfg.zodiac[z])nums.push(...cfg.zodiac[z].map(n=>n.toString().padStart(2,'0'))); }); } const dir=cfg.wuxing[cat]||cfg.bose[cat]||cfg.banbo[cat]||cfg.danshuang[cat]||cfg.weishu[cat]||cfg.daxiaodanshuang[cat]||cfg.daxiao[cat]||cfg.heshu[cat]||cfg.toushu[cat]||cfg.menshu[cat]||cfg.duanwei[cat]||cfg.hedahexiao[cat]||cfg.weidaweixiao[cat]||cfg.hewei[cat]||cfg.heshudanshuang[cat]||cfg.toushuDanshuang[cat]; if(dir)nums.push(...dir.map(n=>n.toString().padStart(2,'0'))); if(cfg.zodiac[cat])nums.push(...cfg.zodiac[cat].map(n=>n.toString().padStart(2,'0'))); return new Set(nums); }); let inter=sets[0]; for(let i=1;i<sets.length;i++)inter=new Set([...inter].filter(x=>sets[i].has(x))); const res=[...inter].sort((a,b)=>parseInt(a)-parseInt(b)); if(!res.length){showToast('无共同号码');return;} const str=res.join('-'); const cf=await confirm(`转换结果：${str}\n是否替换选中文本？`); if(cf){ta.value=ta.value.substring(0,s)+str+ta.value.substring(e);convertOrderText();} }
 
-// ===== 订单识别核心（修复：识别框无效行红色 + 语义转换右边只显示无效字符） =====
+// ===== 订单识别核心（前缀/标点不影响无效判定，无效行红色 + 语义转换右边提示） =====
 function convertOrderText() {
   const inputEl=document.querySelector('.source-order-input');
   if(!inputEl)return;
@@ -1329,7 +1354,7 @@ function convertOrderText() {
     }
   });
 
-  // 收集无效字符（只取无效字/数字本身）
+  // 收集无效字符，同时判断是否有有效结果
   const allInvalidChars = [];
   let hasAnyValidResult = false;
 
@@ -1561,10 +1586,10 @@ function renderReportAmountTable(){ const tbl=document.getElementById('reportAmo
 function renderFrequencyCards(){ const nt=document.getElementById('numberFreqTable'); if(!nt)return; nt.innerHTML=''; const cols=[...Array(5)].map((_,c)=>Array.from({length:c===4?9:10},(_,r)=>(c*10+r+1).toString().padStart(2,'0'))); let th='<thead><tr>'; for(let c=0;c<5;c++)th+='<th>号码</th><th>次数</th>'; th+='</tr></thead>'; let tb='<tbody>'; for(let r=0;r<10;r++){ tb+='<tr>'; for(let c=0;c<5;c++){ const n=cols[c][r]||''; if(n){ const cnt=numberCount[n]||0; const cls=redNumbers.includes(n)?'red-text':(blueNumbers.includes(n)?'blue-text':'green-text'); tb+=`<td class="${cls}">${n}</td><td class="black-text">${cnt||''}</td>`; }else{tb+='<td></td><td></td>';} } tb+='</tr>'; } tb+='</tbody>'; nt.innerHTML=th+tb; const zt=document.getElementById('zodiacFreqTable'); if(!zt)return; zt.innerHTML=''; const lz=['鼠','牛','虎','兔','龙','蛇'],rz=['马','羊','猴','鸡','狗','猪']; const zcm={'鼠':'red-text','兔':'red-text','马':'red-text','鸡':'red-text','虎':'blue-text','蛇':'blue-text','猴':'blue-text','猪':'blue-text','牛':'green-text','龙':'green-text','羊':'green-text','狗':'green-text'}; let zth='<thead><tr><th>生肖</th><th>次数</th><th>生肖</th><th>次数</th></tr></thead>',ztb='<tbody>'; for(let r=0;r<6;r++){ const l=lz[r],r2=rz[r]; const lc=zodiacCount[l]||0,rc=zodiacCount[r2]||0; ztb+=`<tr><td class="${zcm[l]}">${l}</td><td class="black-text">${lc||''}</td><td class="${zcm[r2]}">${r2}</td><td class="black-text">${rc||''}</td></tr>`; } ztb+='</tbody>'; zt.innerHTML=zth+ztb; }
 function renderAmountFrequencyCards(){ const nt=document.getElementById('numberAmountFreqTable'); if(!nt)return; nt.innerHTML=''; const cols=[...Array(5)].map((_,c)=>Array.from({length:c===4?9:10},(_,r)=>(c*10+r+1).toString().padStart(2,'0'))); let th='<thead><tr>'; for(let c=0;c<5;c++)th+='<th>号码</th><th>次数</th>'; th+='</tr></thead>'; let tb='<tbody>'; for(let r=0;r<10;r++){ tb+='<tr>'; for(let c=0;c<5;c++){ const n=cols[c][r]||''; if(n){ const cnt=numberAmountCount[n]||0; const cls=redNumbers.includes(n)?'red-text':(blueNumbers.includes(n)?'blue-text':'green-text'); tb+=`<td class="${cls}">${n}</td><td class="black-text">${cnt||''}</td>`; }else{tb+='<td></td><td></td>';} } tb+='</tr>'; } tb+='</tbody>'; nt.innerHTML=th+tb; const zt=document.getElementById('zodiacAmountFreqTable'); if(!zt)return; zt.innerHTML=''; const lz=['鼠','牛','虎','兔','龙','蛇'],rz=['马','羊','猴','鸡','狗','猪']; const zcm={'鼠':'red-text','兔':'red-text','马':'red-text','鸡':'red-text','虎':'blue-text','蛇':'blue-text','猴':'blue-text','猪':'blue-text','牛':'green-text','龙':'green-text','羊':'green-text','狗':'green-text'}; let zth='<thead><tr><th>生肖</th><th>次数</th><th>生肖</th><th>次数</th></tr></thead>',ztb='<tbody>'; for(let r=0;r<6;r++){ const l=lz[r],r2=rz[r]; const lc=zodiacAmountCount[l]||0,rc=zodiacAmountCount[r2]||0; ztb+=`<tr><td class="${zcm[l]}">${l}</td><td class="black-text">${lc||''}</td><td class="${zcm[r2]}">${r2}</td><td class="black-text">${rc||''}</td></tr>`; } ztb+='</tbody>'; zt.innerHTML=zth+ztb; }
 
-// ===== 对奖相关 =====
+// ===== 对奖相关（恢复原版 highlightContent 逻辑） =====
 function getNumberListForCategory(cat,cfg){ const nums=[]; if(cfg.shengxiaoAttr[cat]){ cfg.shengxiaoAttr[cat].forEach(z=>{if(cfg.zodiac[z])nums.push(...cfg.zodiac[z].map(n=>n.toString().padStart(2,'0')));}); } const dir=cfg.wuxing[cat]||cfg.bose[cat]||cfg.banbo[cat]||cfg.danshuang[cat]||cfg.weishu[cat]||cfg.daxiaodanshuang[cat]||cfg.daxiao[cat]||cfg.heshu[cat]||cfg.toushu[cat]||cfg.menshu[cat]||cfg.duanwei[cat]||cfg.hedahexiao[cat]||cfg.weidaweixiao[cat]||cfg.hewei[cat]||cfg.heshudanshuang[cat]||cfg.toushuDanshuang[cat]; if(dir)nums.push(...dir.map(n=>n.toString().padStart(2,'0'))); if(cfg.zodiac[cat])nums.push(...cfg.zodiac[cat].map(n=>n.toString().padStart(2,'0'))); return [...new Set(nums)]; }
 function isTokenMatching(token,targetNum,cfg){ const t=targetNum.padStart(2,'0'); if(/^\d{1,2}$/.test(token))return token.padStart(2,'0')===t; const vc=getAllValidCategories(cfg); if(vc.has(token)){const nums=getNumberListForCategory(token,cfg);return nums.includes(t);} return false; }
-function highlightContent(content,targetNum,cfg){ if(!targetNum)return content; const t=targetNum.padStart(2,'0'); return content.replace(new RegExp(`(${t})`, 'g'), '<span class="highlight-number">$1</span>'); }
+function highlightContent(content,targetNum,cfg){ if(!targetNum)return content; const t=targetNum.padStart(2,'0'); const parts=[];let tmp=''; for(const ch of content){if(ch==='-'||ch===' '){if(tmp)parts.push(tmp);parts.push(ch);tmp='';}else{tmp+=ch;}} if(tmp)parts.push(tmp); return parts.map(p=>{if(p==='-'||p===' ')return p;if(isTokenMatching(p,targetNum,cfg))return`<span class="highlight-number">${p}</span>`;return p;}).join(''); }
 function orderContainsTarget(content,targetNum,cfg){ if(!targetNum)return true; const t=targetNum.padStart(2,'0'); const lines=content.split('\n'); for(const line of lines){ const m=line.match(/^(.+?)\s+各数\s+(\d+)$/); if(!m)continue; const cont=m[1]; const parts=[];let tmp=''; for(const ch of cont){if(ch==='-'||ch===' '){if(tmp)parts.push(tmp);tmp='';}else{tmp+=ch;}} if(tmp)parts.push(tmp); for(const p of parts){if(p!=='-'&&p!==' '&&isTokenMatching(p,targetNum,cfg))return true;} } return false; }
 function formatTimestampToCST(iso){ const d=new Date(iso); return new Intl.DateTimeFormat('zh-CN',{year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:'Asia/Shanghai'}).format(d); }
 function getUserColor(u){ let h=0; for(let i=0;i<u.length;i++)h=u.charCodeAt(i)+((h<<5)-h); const hue=(h%360+360)%360; return`hsl(${hue},70%,45%)`; }
@@ -1641,12 +1666,9 @@ async function applyPrizeFilter(){
       const hl=lines.map(l=>{
         const m=l.match(/^(.+?)\s+各数\s+(\d+)$/);
         if(!m)return l;
-        let cont=m[1],amt=m[2];
-        if(pn){
-          const t=pn.padStart(2,'0');
-          cont = cont.replace(new RegExp(`(${t})`, 'g'), '<span class="highlight-number">$1</span>');
-        }
-        return`${cont} 各数 ${amt}`;
+        const cont=m[1],amt=m[2];
+        const hc=highlightContent(cont,pn,cfg);
+        return`${hc} 各数 ${amt}`;
       }).join('<br>');
       return`<div class="order-item"><input type="checkbox" class="order-check" data-id="${it.id}"><div class="order-content">${hl}</div><div class="order-info"><span class="order-total" style="color:#000;">合计：${ta}</span><span class="order-meta"><span style="color:${col};">用户：${ud}</span> &nbsp; ${ts}</span></div><button class="order-del" onclick="deleteOrderRecord(${it.id})">删除</button></div>`;
     }).join('');
