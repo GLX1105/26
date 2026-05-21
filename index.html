@@ -914,7 +914,7 @@ function extractInvalidChars(line, cfg, vc) {
   const allAmps = [...HARD_AMP_LIST, ...cusAmp];
   allAmps.sort((a,b) => b.length - a.length);
 
-  // 找到第一个金额指示符的位置，只分析前面的投注内容
+  // 找到第一个金额指示符的位置
   let ampIndex = line.length;
   for (const amp of allAmps) {
     const idx = line.indexOf(amp);
@@ -922,13 +922,14 @@ function extractInvalidChars(line, cfg, vc) {
       ampIndex = idx;
     }
   }
+  // 只检查金额指示符前面的投注内容
   const betPart = line.substring(0, ampIndex);
 
   const invalids = [];
   let i = 0;
   while (i < betPart.length) {
     const ch = betPart[i];
-    // 跳过分隔符
+    // 跳过分隔符和标点
     if (/[\s,，.。、+\-*＊\/\\|]/.test(ch)) { i++; continue; }
     // 处理数字
     if (/\d/.test(ch)) {
@@ -939,6 +940,7 @@ function extractInvalidChars(line, cfg, vc) {
         j++;
       }
       const num = parseInt(numStr);
+      // 无效数字（不在 1~49 范围内）
       if (num < 1 || num > 49) {
         invalids.push(`<span style="color:red;">${numStr}</span>`);
       }
@@ -958,6 +960,7 @@ function extractInvalidChars(line, cfg, vc) {
         }
       }
       if (!matched) {
+        // 既不是有效单字，也不是多字分类的一部分
         invalids.push(`<span style="color:red;">${ch}</span>`);
         i++;
       }
@@ -968,7 +971,7 @@ function extractInvalidChars(line, cfg, vc) {
   return invalids;
 }
 
-// ===== 检测一行投注内容是否存在无效字符（忽略前缀、金额后缀，检查数字有效性） =====
+// ===== 检测一行投注内容是否存在无效字符 =====
 function hasInvalidChars(line, cfg, vc) {
   const HARD_AMP_LIST = ['各','各号','号','个','=','各数','每数','每号','个号','每个号','各码','各号码'];
   const cusAmp = getCustomAmountPrefixes();
@@ -985,10 +988,10 @@ function hasInvalidChars(line, cfg, vc) {
   }
   let cleaned = line.substring(0, ampIndex);
 
-  // 去掉分隔符和标点
+  // 去掉所有分隔符和标点
   cleaned = cleaned.replace(/[\s,，.。、+\-*＊\/\\|]+/g, '');
 
-  // 先检查数字：提取所有连续数字，判断是否在 1~49 内
+  // 先检查数字：提取所有连续数字
   const numbers = cleaned.match(/\d+/g) || [];
   for (const numStr of numbers) {
     const num = parseInt(numStr);
@@ -1012,7 +1015,7 @@ function hasInvalidChars(line, cfg, vc) {
         break;
       }
     }
-    if (!matched) return true; // 存在无法匹配的汉字
+    if (!matched) return true;
   }
   return false;
 }
@@ -1143,13 +1146,13 @@ function renderCustomConfigContainer() {
 async function addCustomCategory() {
   const label = await prompt('请输入新分类名称（如：大尾）');
   if (!label) return;
-  const value = await prompt(`请输入“${label}”对应的号码或分类名（空格分隔，例如：01 02 牛 马）`);
+  const value = await prompt(`请输入"${label}"对应的号码或分类名（空格分隔，例如：01 02 牛 马）`);
   if (value === null) return;
   const cats = loadCustomCategories();
   cats.push({ label, value: value.trim() });
   saveCustomCategories(cats);
   renderCustomConfigContainer();
-  showToast('自定义分类已添加，请点击“保存”按钮存储配置');
+  showToast('自定义分类已添加，请点击"保存"按钮存储配置');
 }
 
 async function deleteCustomCategory() {
@@ -1163,7 +1166,7 @@ async function deleteCustomCategory() {
   cats.splice(idx, 1);
   saveCustomCategories(cats);
   renderCustomConfigContainer();
-  showToast('自定义分类已删除，请点击“保存”按钮使更改生效');
+  showToast('自定义分类已删除，请点击"保存"按钮使更改生效');
 }
 
 function deleteCustomCategoryByIndex(index) {
@@ -1263,7 +1266,7 @@ function applyReplacePresets(text) { const p=getReplacePresets(); let r=text; p.
 // ===== 语义转换 =====
 async function semanticReplace() { const ta=document.querySelector('.source-order-input'); if(!ta)return; const s=ta.selectionStart,e=ta.selectionEnd; if(s===e){showToast('请先选择文本');return;} const sel=ta.value.substring(s,e); const cfg=getAllConfigData(); const vc=getAllValidCategories(cfg); const tokens=sel.split(/[\s,，.。、+\-*＊\/\\|]+/).filter(t=>t.trim()); const matched=tokens.filter(t=>vc.has(t)); if(!matched.length){showToast('未识别有效分类');return;} let sets=matched.map(cat=>{ let nums=[]; if(cfg.shengxiaoAttr[cat]){ cfg.shengxiaoAttr[cat].forEach(z=>{ if(cfg.zodiac[z])nums.push(...cfg.zodiac[z].map(n=>n.toString().padStart(2,'0'))); }); } const dir=cfg.wuxing[cat]||cfg.bose[cat]||cfg.banbo[cat]||cfg.danshuang[cat]||cfg.weishu[cat]||cfg.daxiaodanshuang[cat]||cfg.daxiao[cat]||cfg.heshu[cat]||cfg.toushu[cat]||cfg.menshu[cat]||cfg.duanwei[cat]||cfg.hedahexiao[cat]||cfg.weidaweixiao[cat]||cfg.hewei[cat]||cfg.heshudanshuang[cat]||cfg.toushuDanshuang[cat]; if(dir)nums.push(...dir.map(n=>n.toString().padStart(2,'0'))); if(cfg.zodiac[cat])nums.push(...cfg.zodiac[cat].map(n=>n.toString().padStart(2,'0'))); return new Set(nums); }); let inter=sets[0]; for(let i=1;i<sets.length;i++)inter=new Set([...inter].filter(x=>sets[i].has(x))); const res=[...inter].sort((a,b)=>parseInt(a)-parseInt(b)); if(!res.length){showToast('无共同号码');return;} const str=res.join('-'); const cf=await confirm(`转换结果：${str}\n是否替换选中文本？`); if(cf){ta.value=ta.value.substring(0,s)+str+ta.value.substring(e);convertOrderText();} }
 
-// ===== 订单识别核心（完全修复：识别框红色、语义转换提示、前缀/后缀忽略、数字检查） =====
+// ===== 订单识别核心（彻底修复：前缀不标红、金额后缀忽略、数字检查、索引匹配） =====
 function convertOrderText() {
   const inputEl=document.querySelector('.source-order-input');
   if(!inputEl)return;
@@ -1297,7 +1300,7 @@ function convertOrderText() {
       let num = pairMatch[1];
       const amount = pairMatch[2];
       if(num.length===1) num = '0'+num;
-      resultLines.push(`${num} 各数 ${amount}`);
+      resultLines.push({line:`${num} 各数 ${amount}`, originalLine:line});
       return;
     }
     let cl=line;
@@ -1322,8 +1325,8 @@ function convertOrderText() {
           });
           const amtPerBen = Math.round(amtRaw / 5);
           const amtPerOther = Math.round(amtRaw / 4);
-          if (benmingList.length > 0) resultLines.push(`${benmingList.join('-')} 各数 ${amtPerBen}`);
-          if (otherList.length > 0) resultLines.push(`${otherList.join('-')} 各数 ${amtPerOther}`);
+          if (benmingList.length > 0) resultLines.push({line:`${benmingList.join('-')} 各数 ${amtPerBen}`, originalLine:line});
+          if (otherList.length > 0) resultLines.push({line:`${otherList.join('-')} 各数 ${amtPerOther}`, originalLine:line});
           return;
         }
       }
@@ -1340,21 +1343,21 @@ function convertOrderText() {
           const am=omPart.match(/(\d+)/);
           if(am){
             const amt=am[1];
-            if(cont){ const jo=tokenizeAndJoin(cont); if(jo)resultLines.push(`${jo} 各数 ${amt}`); }
+            if(cont){ const jo=tokenizeAndJoin(cont); if(jo)resultLines.push({line:`${jo} 各数 ${amt}`, originalLine:line}); }
             rl=rl.substring(oi+omPart.length);
           }
         }
       });
-      if(rl.trim()){ const jo=tokenizeAndJoin(rl.trim()); if(jo)resultLines.push(`${jo} 各数 0`); }
+      if(rl.trim()){ const jo=tokenizeAndJoin(rl.trim()); if(jo)resultLines.push({line:`${jo} 各数 0`, originalLine:line}); }
     }else{
       const pat=new RegExp(`^(.+?)${AMP_ORIGINAL}(\\d+)$`);
       const m=cl.match(pat);
-      if(m){ const jo=tokenizeAndJoin(m[1].trim()); if(jo)resultLines.push(`${jo} 各数 ${m[2]}`); }
+      if(m){ const jo=tokenizeAndJoin(m[1].trim()); if(jo)resultLines.push({line:`${jo} 各数 ${m[2]}`, originalLine:line}); }
       else{
         const sp=new RegExp(`(\\d+)(?:号|${AMP_ORIGINAL})(\\d+)$`);
         const sm=cl.match(sp);
-        if(sm){ let num=sm[1].trim(); if(parseInt(num)>=1&&parseInt(num)<=49){ num=num.length===1?`0${num}`:num; resultLines.push(`${num} 各数 ${sm[2]}`); } }
-        else{ const jo=tokenizeAndJoin(cl); if(jo)resultLines.push(`${jo} 各数 0`); }
+        if(sm){ let num=sm[1].trim(); if(parseInt(num)>=1&&parseInt(num)<=49){ num=num.length===1?`0${num}`:num; resultLines.push({line:`${num} 各数 ${sm[2]}`, originalLine:line}); } }
+        else{ const jo=tokenizeAndJoin(cl); if(jo)resultLines.push({line:`${jo} 各数 0`, originalLine:line}); }
       }
     }
   });
@@ -1364,8 +1367,9 @@ function convertOrderText() {
   let hasAnyValidResult = false;
 
   let html = '';
-  resultLines.forEach((resultLine, index) => {
-    const originalLine = lines[index] || resultLine;
+  resultLines.forEach((item) => {
+    const resultLine = item.line;
+    const originalLine = item.originalLine;
     const m = resultLine.match(/^(.+?)\s+各数\s+(\d+)$/);
     if (!m) {
       html += `<div style="color:red;">${resultLine}</div>`;
@@ -1650,7 +1654,6 @@ function updatePrizeResult() {
   document.getElementById('prizeReportBet').textContent = reportBet;
   const riskSpan = document.getElementById('prizeReportRisk');
   riskSpan.textContent = reportRisk;
-  // 盈亏颜色：正值蓝色，负值红色
   if (reportRisk >= 0) {
     riskSpan.style.color = '#3498db';
   } else {
