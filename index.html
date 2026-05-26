@@ -592,7 +592,7 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
 <div class="container" id="mainContent">
   <div class="recognize-wrap">
       <div class="card" style="margin-top:0;">
-        <div class="card-title">下注统计</div>
+        <div class="card-title">下注统计<span id="filterDateDrawInfo" style="margin-left:12px;font-size:14px;font-weight:normal;display:none;"></span></div>
         <div class="freq-container">
           <div class="freq-card">
             <div class="freq-title">号码次数<div class="amount-stat-box" id="numberTotalBox" style="display:none; margin-left:8px;"><span id="numberTotalAmount">0</span></div></div>
@@ -913,7 +913,7 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
   </div>
 </div>
 <script>
-// ===== 自定义对话框系统 =====
+    // ===== 自定义对话框系统 =====
 function showCustomDialog({ title = '提示', message = '', type = 'alert', defaultValue = '', placeholder = '' }) {
   return new Promise((resolve) => {
     const overlay = document.createElement('div'); overlay.className = 'custom-dialog-overlay';
@@ -3020,7 +3020,7 @@ async function autoCleanRecycleBin() {
     }
   } catch(e) { }
 }
- // ===== 格式化日期 M/D =====
+    // ===== 格式化日期 M/D =====
 function formatDateMD(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return `${d.getMonth()+1}/${d.getDate()}`;
@@ -3091,10 +3091,13 @@ async function showDrawRecord() {
         tableHtml += `<td><input type="text" class="draw-date-input draw-date-${iid}" value="${savedDate}" disabled></td>`;
         // 期号列
         tableHtml += `<td>${iid}期</td>`;
-        // 号码列
-        tableHtml += `<td><input type="text" class="draw-number-input draw-num-${iid}" value="${savedNumber}" ${isReadOnly ? 'disabled' : ''} oninput="onDrawNumberInput(this, '${iid}')" maxlength="2"></td>`;
-        // 生肖列
-        const zodiac = savedNumber ? (currentZodiacMap[savedNumber.padStart(2,'0')] || '') : '';
+        // 号码列（根据已保存号码添加颜色类）
+        const numVal = savedNumber ? savedNumber.padStart(2,'0') : '';
+        const numColorClass = savedNumber ? getNumberColorClass(numVal) : '';
+        const inputDisabled = isReadOnly ? 'disabled' : '';
+        tableHtml += `<td><input type="text" class="draw-number-input draw-num-${iid} ${numColorClass}" value="${savedNumber}" ${inputDisabled} oninput="onDrawNumberInput(this, '${iid}')" maxlength="2"></td>`;
+        // 生肖列（根据已保存号码计算生肖和颜色）
+        const zodiac = savedNumber ? (currentZodiacMap[numVal] || '') : '';
         const zColorClass = getZodiacColorClass(zodiac);
         tableHtml += `<td><span class="draw-zodiac-${iid} ${zColorClass}">${zodiac}</span></td>`;
       } else {
@@ -3255,10 +3258,9 @@ function getCurrentIssueNumber(year, targetDateStr) {
 }
 
 function updateRecentDrawTexts() {
-  // 文本一：下注统计卡片 → 号码/生肖文本
   updateRecentDrawNumbers();
-  // 文本二：金额次数统计卡片 → 生肖重复统计文本
   updateRecentZodiacStats();
+  updateFilterDateDrawInfo();
 }
 
 function updateRecentDrawNumbers() {
@@ -3293,7 +3295,6 @@ function updateRecentDrawNumbers() {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
   } catch (e) {}
 
-  // 收集有效数据：有号码、期号在范围内
   const entries = [];
   for (let i = currentIssue - count + 1; i <= currentIssue; i++) {
     if (i < 1) continue;
@@ -3313,7 +3314,6 @@ function updateRecentDrawNumbers() {
     return;
   }
 
-  // 按期号从小到大排列（已经在收集中按顺序）
   let html = '';
   entries.forEach((entry, idx) => {
     if (idx > 0) html += '、';
@@ -3357,7 +3357,6 @@ function updateRecentZodiacStats() {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
   } catch (e) {}
 
-  // 收集生肖列表
   const zodiacList = [];
   for (let i = currentIssue - count + 1; i <= currentIssue; i++) {
     if (i < 1) continue;
@@ -3377,17 +3376,14 @@ function updateRecentZodiacStats() {
     return;
   }
 
-  // 统计每个生肖出现次数
   const freq = {};
   zodiacList.forEach(z => {
     freq[z] = (freq[z] || 0) + 1;
   });
 
-  // 按出现次数降序排序
   const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
-
-  const repeated = []; // 重复的（次数>1）
-  const single = [];   // 不重复的（次数=1）
+  const repeated = [];
+  const single = [];
 
   sorted.forEach(([zodiac, cnt]) => {
     if (cnt > 1) {
@@ -3398,11 +3394,9 @@ function updateRecentZodiacStats() {
   });
 
   let html = '';
-  // 重复生肖按次数降序
   repeated.forEach(item => {
     html += `<div>${item.cnt}次：<span class="${getZodiacColorClass(item.zodiac)}">${item.zodiac}</span></div>`;
   });
-  // 无重复生肖
   if (single.length > 0) {
     const singleSpans = single.map(z => `<span class="${getZodiacColorClass(z)}">${z}</span>`).join('、');
     html += `<div>${singleSpans}</div>`;
@@ -3410,6 +3404,45 @@ function updateRecentZodiacStats() {
 
   container.innerHTML = html;
   container.style.display = '';
+}
+
+function updateFilterDateDrawInfo() {
+  const span = document.getElementById('filterDateDrawInfo');
+  if (!span) return;
+
+  const fd = document.getElementById('filterDate')?.value || getTodayCST();
+  let year = new Date().getFullYear();
+  const m = fd.match(/^(\d{4})/);
+  if (m) year = parseInt(m[1]);
+
+  const issueNumber = getCurrentIssueNumber(year, fd);
+  if (!issueNumber) {
+    span.style.display = 'none';
+    return;
+  }
+
+  const issueId = issueNumber.toString().padStart(2, '0');
+  const storageKey = `drawRecord_${year}`;
+  let savedData = {};
+  try {
+    savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  } catch (e) {}
+
+  const entry = savedData[issueId];
+  if (!entry || !entry.number || !entry.number.trim()) {
+    span.style.display = 'none';
+    return;
+  }
+
+  const num = entry.number.trim().padStart(2, '0');
+  if (!/^\d{2}$/.test(num) || parseInt(num) < 1 || parseInt(num) > 49) {
+    span.style.display = 'none';
+    return;
+  }
+
+  const zodiac = currentZodiacMap[num] || '';
+  span.innerHTML = `<span class="num ${getNumberColorClass(num)}">${num}</span><span class="slash" style="color:#000;">/</span><span class="${getZodiacColorClass(zodiac)}">${zodiac}</span>`;
+  span.style.display = '';
 }
 
 window.onload = async () => {
@@ -3436,7 +3469,6 @@ window.onload = async () => {
     calculateStorageUsage();
     updateOrderTotalDisplay();
     updateReportAmountTotal();
-    // 初始化时刷新近期开奖文本
     updateRecentDrawTexts();
   };
   if (!checkCurrentAccess()) { showLoginScreen(); }
@@ -3447,4 +3479,4 @@ window.onload = async () => {
 };
 </script>
 </body>
-</html>   
+</html>
