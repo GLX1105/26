@@ -536,18 +536,6 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
   background: #f8f8f8;
   color: #333;
 }
-.draw-date-input {
-  width: 42px;
-  padding: 0;
-  text-align: center;
-  font-size: 12px;
-  border: 1px solid #ccc;
-  border-radius: 2px;
-}
-.draw-date-input:disabled {
-  background: #f8f8f8;
-  color: #333;
-}
 
 /* 近期开奖展示文本样式 */
 .recent-draw-text {
@@ -2704,6 +2692,7 @@ if (filterDateEl) {
       applyPrizeFilter();
     }
     applyReportCap();
+    updateRecentDrawTexts();
   });
   filterDateEl.addEventListener('input', updateTableFromRecords);
 }
@@ -3020,7 +3009,7 @@ async function autoCleanRecycleBin() {
     }
   } catch(e) { }
 }
-// ===== 格式化日期 M/D =====
+// ===== 格式化日期 M/D（仅用于期号计算，表格不再显示日期列） =====
 function formatDateMD(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return `${d.getMonth()+1}/${d.getDate()}`;
@@ -3068,10 +3057,10 @@ async function showDrawRecord() {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
   } catch (e) {}
 
-  // 生成表格HTML
+  // 生成表格HTML（去掉日期列，只保留期号、号码、生肖）
   let tableHtml = '<div class="draw-table-wrap"><table class="draw-table"><thead><tr>';
   for (let g = 0; g < groups; g++) {
-    tableHtml += '<th>日期</th><th>期号</th><th>号码</th><th>生肖</th>';
+    tableHtml += '<th>期号</th><th>号码</th><th>生肖</th>';
   }
   tableHtml += '</tr></thead><tbody>';
 
@@ -3083,12 +3072,9 @@ async function showDrawRecord() {
         const row = rows[idx];
         const iid = row.issue;
         const savedEntry = savedData[iid] || {};
-        const savedDate = savedEntry.date || row.date;
         const savedNumber = savedEntry.number || '';
         const isReadOnly = !!savedNumber;
 
-        // 日期列
-        tableHtml += `<td><input type="text" class="draw-date-input draw-date-${iid}" value="${savedDate}" disabled></td>`;
         // 期号列
         tableHtml += `<td>${iid}期</td>`;
         // 号码列（根据已保存号码添加颜色类）
@@ -3101,7 +3087,7 @@ async function showDrawRecord() {
         const zColorClass = getZodiacColorClass(zodiac);
         tableHtml += `<td><span class="draw-zodiac-${iid} ${zColorClass}">${zodiac}</span></td>`;
       } else {
-        tableHtml += '<td></td><td></td><td></td><td></td>';
+        tableHtml += '<td></td><td></td><td></td>';
       }
     }
     tableHtml += '</tr>';
@@ -3112,7 +3098,7 @@ async function showDrawRecord() {
   const win = document.createElement('div');
   win.className = 'floating-window';
   win.id = 'drawRecordWin';
-  win.style.width = Math.min(groups * 280 + 40, window.innerWidth - 20) + 'px';
+  win.style.width = Math.min(groups * 200 + 40, window.innerWidth - 20) + 'px';
   win.style.height = '650px';
   win.style.left = '50%';
   win.style.top = '50%';
@@ -3201,8 +3187,8 @@ function onDrawNumberInput(input, issueId) {
 }
 
 function editDrawRecord() {
-  document.querySelectorAll('.draw-number-input, .draw-date-input').forEach(el => el.disabled = false);
-  showToast('已进入编辑模式，可修改号码和日期');
+  document.querySelectorAll('.draw-number-input').forEach(el => el.disabled = false);
+  showToast('已进入编辑模式，可修改号码');
 }
 
 async function saveDrawRecord(year) {
@@ -3220,15 +3206,13 @@ async function saveDrawRecord(year) {
       } else {
         num = '';
       }
-      const dateInput = document.querySelector(`.draw-date-${issueId}`);
-      const dateVal = dateInput ? dateInput.value.trim() : '';
-      data[issueId] = { number: num, date: dateVal };
+      data[issueId] = { number: num };
     }
   });
   // 区分地区存储
   const storageKey = `drawRecord_${currentRegion}_${year}`;
   localStorage.setItem(storageKey, JSON.stringify(data));
-  document.querySelectorAll('.draw-number-input, .draw-date-input').forEach(el => el.disabled = true);
+  document.querySelectorAll('.draw-number-input').forEach(el => el.disabled = true);
 
   // 刷新主界面近期文本
   updateRecentDrawTexts();
