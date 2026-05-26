@@ -514,17 +514,18 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
   font-size: 12px;
 }
 .draw-table th, .draw-table td {
-  border: 1px solid #ccc;
-  padding: 3px 5px;
+  border: none;
+  padding: 1px 2px;
   text-align: center;
   white-space: nowrap;
 }
 .draw-table th {
   background: #f0f0f0;
+  font-weight: bold;
 }
 .draw-number-input {
   width: 36px;
-  padding: 1px 2px;
+  padding: 0;
   text-align: center;
   font-size: 12px;
   border: 1px solid #ccc;
@@ -535,8 +536,8 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
   color: #333;
 }
 .draw-date-input {
-  width: 48px;
-  padding: 1px 2px;
+  width: 42px;
+  padding: 0;
   text-align: center;
   font-size: 12px;
   border: 1px solid #ccc;
@@ -546,6 +547,20 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
   background: #f8f8f8;
   color: #333;
 }
+
+/* 近期开奖展示文本样式 */
+.recent-draw-text {
+  font-size: 13px;
+  line-height: 1.6;
+  margin-top: 6px;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  white-space: pre-wrap;
+}
+.recent-draw-text .num { font-weight: bold; }
+.recent-draw-text .slash { color: #000; }
 </style>
 </head>
 <body>
@@ -585,6 +600,8 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
           <div class="freq-card">
             <div class="freq-title">生肖次数<div class="amount-stat-box" id="zodiacTotalBox" style="display:none; margin-left:8px;"><span id="zodiacTotalAmount">0</span></div></div>
             <table class="freq-table" id="zodiacFreqTable"></table>
+            <!-- 近期开奖号码/生肖文本 -->
+            <div id="recentDrawNumbers" class="recent-draw-text" style="display:none;"></div>
           </div>
         </div>
       </div>
@@ -599,6 +616,8 @@ tr.selected-row {background-color: #dceeff !important; font-weight: bold; box-sh
           <div class="freq-card">
             <div class="freq-title">生肖金额次数 <span style="font-size:11px;font-weight:normal;margin-left:8px;">范围：<input type="number" id="zodiacAmountMin" class="range-input" value="1" min="1"> - <input type="number" id="zodiacAmountMax" class="range-input" value="50000" min="1"></span></div>
             <table class="freq-table" id="zodiacAmountFreqTable"></table>
+            <!-- 生肖重复统计文本 -->
+            <div id="recentZodiacStats" class="recent-draw-text" style="display:none;"></div>
           </div>
         </div>
       </div>
@@ -1521,7 +1540,8 @@ function tokenizeAndJoin(content) {
   });
   return res.join('-');
 }
-    function convertOrderText() {
+
+function convertOrderText() {
   const inputEl = document.querySelector('.source-order-input');
   const resultEl = document.getElementById('orderResult');
   const invalidSpan = document.getElementById('invalidTokensDisplay');
@@ -3001,7 +3021,6 @@ async function autoCleanRecycleBin() {
     }
   } catch(e) { }
 }
-
 // ===== 农历年初一与除夕对照表（公历）2025‑2068 =====
 const LUNAR_NEW_YEAR_MAP = {
   2025: { start: '2025-01-29', end: '2026-02-16' },
@@ -3109,7 +3128,7 @@ async function showDrawRecord() {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
   } catch (e) {}
 
-  // 生成表格HTML（使用单一表格，每组四列：日期、期号、号码输入、生肖）
+  // 生成表格HTML
   let tableHtml = '<div class="draw-table-wrap"><table class="draw-table"><thead><tr>';
   for (let g = 0; g < groups; g++) {
     tableHtml += '<th>日期</th><th>期号</th><th>号码</th><th>生肖</th>';
@@ -3126,18 +3145,17 @@ async function showDrawRecord() {
         const savedEntry = savedData[iid] || {};
         const savedDate = savedEntry.date || row.date;
         const savedNumber = savedEntry.number || '';
-        const isReadOnly = !!savedNumber; // 有号码时默认禁用，需修改才可编辑
+        const isReadOnly = !!savedNumber;
 
-        // 日期列（可编辑输入框，初始禁用）
+        // 日期列
         tableHtml += `<td><input type="text" class="draw-date-input draw-date-${iid}" value="${savedDate}" disabled></td>`;
         // 期号列
         tableHtml += `<td>${iid}期</td>`;
         // 号码列
-        tableHtml += `<td><input type="text" class="draw-number-input draw-num-${iid}" value="${savedNumber}" ${isReadOnly ? 'disabled' : ''} oninput="onDrawNumberInput(this, '${iid}')"></td>`;
+        tableHtml += `<td><input type="text" class="draw-number-input draw-num-${iid}" value="${savedNumber}" ${isReadOnly ? 'disabled' : ''} oninput="onDrawNumberInput(this, '${iid}')" maxlength="2"></td>`;
         // 生肖列
         const zodiac = savedNumber ? (currentZodiacMap[savedNumber.padStart(2,'0')] || '') : '';
         const zColorClass = getZodiacColorClass(zodiac);
-        const numColorClass = savedNumber ? getNumberColorClass(savedNumber.padStart(2,'0')) : '';
         tableHtml += `<td><span class="draw-zodiac-${iid} ${zColorClass}">${zodiac}</span></td>`;
       } else {
         tableHtml += '<td></td><td></td><td></td><td></td>';
@@ -3151,11 +3169,14 @@ async function showDrawRecord() {
   const win = document.createElement('div');
   win.className = 'floating-window';
   win.id = 'drawRecordWin';
-  win.style.width = Math.min(groups * 300 + 40, window.innerWidth - 20) + 'px';
-  win.style.height = '600px';
+  win.style.width = Math.min(groups * 280 + 40, window.innerWidth - 20) + 'px';
+  win.style.height = '650px';
   win.style.left = '50%';
   win.style.top = '50%';
   win.style.transform = 'translate(-50%, -50%)';
+
+  // 读取已保存的期数
+  const savedCount = localStorage.getItem('recentDrawCount') || '';
 
   win.innerHTML = `
     <div class="modal-header">
@@ -3167,7 +3188,11 @@ async function showDrawRecord() {
     </div>
     <div class="modal-body" style="display:flex; flex-direction:column; gap:10px;">
       <div class="card" style="flex:1; display:flex; flex-direction:column;">
-        <div class="card-title">开奖号码记录</div>
+        <div class="card-title" style="display:flex; align-items:center; gap:8px;">
+          <span>开奖号码记录</span>
+          <input type="number" id="recentDrawCountInput" placeholder="期数" value="${savedCount}" style="width:60px;padding:2px 4px;border:1px solid #ccc;border-radius:4px;font-size:13px;" min="1">
+          <button class="btn btn-primary" onclick="saveRecentDrawCount()" style="padding:4px 12px;font-size:12px;min-height:28px;">保存</button>
+        </div>
         <div style="overflow:auto; flex:1;">
           ${tableHtml}
         </div>
@@ -3182,6 +3207,9 @@ async function showDrawRecord() {
   makeWindowDraggable('drawRecordWin');
   highestZ += 1;
   win.style.zIndex = highestZ;
+
+  // 刷新主界面近期文本
+  updateRecentDrawTexts();
 }
 
 function getZodiacColorClass(zodiac) {
@@ -3206,30 +3234,44 @@ function onDrawNumberInput(input, issueId) {
   let val = input.value.trim();
   if (val === '') {
     const zodiacSpan = document.querySelector(`.draw-zodiac-${issueId}`);
-    if (zodiacSpan) zodiacSpan.textContent = '';
+    if (zodiacSpan) {
+      zodiacSpan.textContent = '';
+      zodiacSpan.className = `draw-zodiac-${issueId}`;
+    }
+    input.className = `draw-number-input draw-num-${issueId}`;
     return;
   }
-  // 自动补零
-  if (/^\d$/.test(val)) val = '0' + val;
-  if (/^\d{2}$/.test(val) && parseInt(val) >= 1 && parseInt(val) <= 49) {
-    input.value = val;
-    const zodiac = currentZodiacMap[val] || '';
+  // 只允许输入数字
+  val = val.replace(/\D/g, '');
+  if (val === '') {
+    input.value = '';
+    return;
+  }
+  // 限制最多两位
+  if (val.length > 2) val = val.slice(0, 2);
+  input.value = val;
+
+  // 当输入完整两位且范围1-49时，显示生肖和颜色
+  if (val.length === 2 && parseInt(val) >= 1 && parseInt(val) <= 49) {
+    const num = val.padStart(2, '0');
+    const zodiac = currentZodiacMap[num] || '';
     const zodiacSpan = document.querySelector(`.draw-zodiac-${issueId}`);
     if (zodiacSpan) {
       zodiacSpan.textContent = zodiac;
       zodiacSpan.className = `draw-zodiac-${issueId} ${getZodiacColorClass(zodiac)}`;
     }
-    // 号码颜色
-    input.className = `draw-number-input draw-num-${issueId} ${getNumberColorClass(val)}`;
+    input.className = `draw-number-input draw-num-${issueId} ${getNumberColorClass(num)}`;
   } else {
-    input.value = '';
     const zodiacSpan = document.querySelector(`.draw-zodiac-${issueId}`);
-    if (zodiacSpan) zodiacSpan.textContent = '';
+    if (zodiacSpan) {
+      zodiacSpan.textContent = '';
+      zodiacSpan.className = `draw-zodiac-${issueId}`;
+    }
+    input.className = `draw-number-input draw-num-${issueId}`;
   }
 }
 
 function editDrawRecord() {
-  // 启用所有号码和日期输入框
   document.querySelectorAll('.draw-number-input, .draw-date-input').forEach(el => el.disabled = false);
   showToast('已进入编辑模式，可修改号码和日期');
 }
@@ -3240,7 +3282,15 @@ async function saveDrawRecord(year) {
   inputs.forEach(input => {
     const issueId = input.className.match(/draw-num-(\d+)/)?.[1];
     if (issueId) {
-      const num = input.value.trim();
+      let num = input.value.trim();
+      if (/^\d$/.test(num)) num = '0' + num;
+      if (/^\d{2}$/.test(num) && parseInt(num) >= 1 && parseInt(num) <= 49) {
+        // 有效号码
+      } else if (num === '') {
+        // 空值允许
+      } else {
+        num = '';
+      }
       const dateInput = document.querySelector(`.draw-date-${issueId}`);
       const dateVal = dateInput ? dateInput.value.trim() : '';
       data[issueId] = { number: num, date: dateVal };
@@ -3248,9 +3298,200 @@ async function saveDrawRecord(year) {
   });
   const storageKey = `drawRecord_${year}`;
   localStorage.setItem(storageKey, JSON.stringify(data));
-  // 禁用所有输入框
   document.querySelectorAll('.draw-number-input, .draw-date-input').forEach(el => el.disabled = true);
+  
+  // 刷新主界面近期文本
+  updateRecentDrawTexts();
+  
   showToast('保存成功');
+}
+
+function saveRecentDrawCount() {
+  const input = document.getElementById('recentDrawCountInput');
+  if (!input) return;
+  const val = parseInt(input.value);
+  if (isNaN(val) || val < 1) {
+    showToast('请输入有效的期数（≥1）');
+    return;
+  }
+  localStorage.setItem('recentDrawCount', val.toString());
+  updateRecentDrawTexts();
+  showToast(`已设置显示最近${val}期`);
+}
+
+function getCurrentIssueNumber(year, targetDateStr) {
+  const dates = getLunarYearDates(year);
+  if (!dates) return null;
+  
+  const startDate = new Date(dates.start + 'T00:00:00');
+  const targetDate = new Date(targetDateStr + 'T00:00:00');
+  
+  if (isNaN(startDate) || isNaN(targetDate)) return null;
+  if (targetDate < startDate) return null;
+  
+  const diffTime = targetDate - startDate;
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const issueNumber = diffDays + 1;
+  
+  return issueNumber;
+}
+
+function updateRecentDrawTexts() {
+  // 文本一：下注统计卡片 → 号码/生肖文本
+  updateRecentDrawNumbers();
+  // 文本二：金额次数统计卡片 → 生肖重复统计文本
+  updateRecentZodiacStats();
+}
+
+function updateRecentDrawNumbers() {
+  const container = document.getElementById('recentDrawNumbers');
+  if (!container) return;
+
+  const countStr = localStorage.getItem('recentDrawCount');
+  if (!countStr) {
+    container.style.display = 'none';
+    return;
+  }
+  const count = parseInt(countStr);
+  if (isNaN(count) || count < 1) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const fd = document.getElementById('filterDate')?.value || getTodayCST();
+  let year = new Date().getFullYear();
+  const m = fd.match(/^(\d{4})/);
+  if (m) year = parseInt(m[1]);
+
+  const currentIssue = getCurrentIssueNumber(year, fd);
+  if (!currentIssue) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const storageKey = `drawRecord_${year}`;
+  let savedData = {};
+  try {
+    savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  } catch (e) {}
+
+  // 收集有效数据：有号码、期号在范围内
+  const entries = [];
+  for (let i = currentIssue - count + 1; i <= currentIssue; i++) {
+    if (i < 1) continue;
+    const issueId = i.toString().padStart(2, '0');
+    const entry = savedData[issueId];
+    if (entry && entry.number && entry.number.trim()) {
+      const num = entry.number.trim().padStart(2, '0');
+      if (/^\d{2}$/.test(num) && parseInt(num) >= 1 && parseInt(num) <= 49) {
+        const zodiac = currentZodiacMap[num] || '';
+        entries.push({ num, zodiac });
+      }
+    }
+  }
+
+  if (entries.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  // 按期号从小到大排列（已经在收集中按顺序）
+  let html = '';
+  entries.forEach((entry, idx) => {
+    if (idx > 0) html += '、';
+    html += `<span class="num ${getNumberColorClass(entry.num)}">${entry.num}</span>`;
+    html += `<span class="slash">/</span>`;
+    html += `<span class="${getZodiacColorClass(entry.zodiac)}">${entry.zodiac}</span>`;
+  });
+  container.innerHTML = html;
+  container.style.display = '';
+}
+
+function updateRecentZodiacStats() {
+  const container = document.getElementById('recentZodiacStats');
+  if (!container) return;
+
+  const countStr = localStorage.getItem('recentDrawCount');
+  if (!countStr) {
+    container.style.display = 'none';
+    return;
+  }
+  const count = parseInt(countStr);
+  if (isNaN(count) || count < 1) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const fd = document.getElementById('filterDate')?.value || getTodayCST();
+  let year = new Date().getFullYear();
+  const m = fd.match(/^(\d{4})/);
+  if (m) year = parseInt(m[1]);
+
+  const currentIssue = getCurrentIssueNumber(year, fd);
+  if (!currentIssue) {
+    container.style.display = 'none';
+    return;
+  }
+
+  const storageKey = `drawRecord_${year}`;
+  let savedData = {};
+  try {
+    savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
+  } catch (e) {}
+
+  // 收集生肖列表
+  const zodiacList = [];
+  for (let i = currentIssue - count + 1; i <= currentIssue; i++) {
+    if (i < 1) continue;
+    const issueId = i.toString().padStart(2, '0');
+    const entry = savedData[issueId];
+    if (entry && entry.number && entry.number.trim()) {
+      const num = entry.number.trim().padStart(2, '0');
+      if (/^\d{2}$/.test(num) && parseInt(num) >= 1 && parseInt(num) <= 49) {
+        const zodiac = currentZodiacMap[num] || '';
+        if (zodiac) zodiacList.push(zodiac);
+      }
+    }
+  }
+
+  if (zodiacList.length === 0) {
+    container.style.display = 'none';
+    return;
+  }
+
+  // 统计每个生肖出现次数
+  const freq = {};
+  zodiacList.forEach(z => {
+    freq[z] = (freq[z] || 0) + 1;
+  });
+
+  // 按出现次数降序排序
+  const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+
+  const repeated = []; // 重复的（次数>1）
+  const single = [];   // 不重复的（次数=1）
+
+  sorted.forEach(([zodiac, cnt]) => {
+    if (cnt > 1) {
+      repeated.push({ zodiac, cnt });
+    } else {
+      single.push(zodiac);
+    }
+  });
+
+  let html = '';
+  // 重复生肖按次数降序
+  repeated.forEach(item => {
+    html += `<div>${item.cnt}次：<span class="${getZodiacColorClass(item.zodiac)}">${item.zodiac}</span></div>`;
+  });
+  // 无重复生肖
+  if (single.length > 0) {
+    const singleSpans = single.map(z => `<span class="${getZodiacColorClass(z)}">${z}</span>`).join('、');
+    html += `<div>${singleSpans}</div>`;
+  }
+
+  container.innerHTML = html;
+  container.style.display = '';
 }
 
 window.onload = async () => {
@@ -3277,6 +3518,8 @@ window.onload = async () => {
     calculateStorageUsage();
     updateOrderTotalDisplay();
     updateReportAmountTotal();
+    // 初始化时刷新近期开奖文本
+    updateRecentDrawTexts();
   };
   if (!checkCurrentAccess()) { showLoginScreen(); }
   else {
@@ -3286,4 +3529,4 @@ window.onload = async () => {
 };
 </script>
 </body>
-</html>
+</html>    
