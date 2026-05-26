@@ -3020,7 +3020,7 @@ async function autoCleanRecycleBin() {
     }
   } catch(e) { }
 }
-    // ===== 格式化日期 M/D =====
+// ===== 格式化日期 M/D =====
 function formatDateMD(dateStr) {
   const d = new Date(dateStr + 'T00:00:00');
   return `${d.getMonth()+1}/${d.getDate()}`;
@@ -3061,8 +3061,8 @@ async function showDrawRecord() {
   const totalIssues = issue - 1;
   const groups = Math.ceil(totalIssues / 100);
 
-  // 读取已保存的数据
-  const storageKey = `drawRecord_${year}`;
+  // 读取已保存的数据（区分地区）
+  const storageKey = `drawRecord_${currentRegion}_${year}`;
   let savedData = {};
   try {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -3118,12 +3118,14 @@ async function showDrawRecord() {
   win.style.top = '50%';
   win.style.transform = 'translate(-50%, -50%)';
 
-  // 读取已保存的期数
-  const savedCount = localStorage.getItem('recentDrawCount') || '';
+  // 读取已保存的期数（区分地区）
+  const savedCount = localStorage.getItem(`recentDrawCount_${currentRegion}`) || '';
+
+  const regionLabel = currentRegion === 'macau' ? '澳门' : '香港';
 
   win.innerHTML = `
     <div class="modal-header">
-      <h3>开奖记录（${year}年阳历）</h3>
+      <h3>开奖记录（${regionLabel} ${year}年阳历）</h3>
       <div class="window-controls">
         <button onclick="maximizeWindow('drawRecordWin')">🗖</button>
         <button onclick="document.getElementById('drawRecordWin').remove()">×</button>
@@ -3223,7 +3225,8 @@ async function saveDrawRecord(year) {
       data[issueId] = { number: num, date: dateVal };
     }
   });
-  const storageKey = `drawRecord_${year}`;
+  // 区分地区存储
+  const storageKey = `drawRecord_${currentRegion}_${year}`;
   localStorage.setItem(storageKey, JSON.stringify(data));
   document.querySelectorAll('.draw-number-input, .draw-date-input').forEach(el => el.disabled = true);
 
@@ -3241,7 +3244,8 @@ function saveRecentDrawCount() {
     showToast('请输入有效的期数（≥1）');
     return;
   }
-  localStorage.setItem('recentDrawCount', val.toString());
+  // 区分地区存储
+  localStorage.setItem(`recentDrawCount_${currentRegion}`, val.toString());
   updateRecentDrawTexts();
   showToast(`已设置显示最近${val}期`);
 }
@@ -3267,7 +3271,8 @@ function updateRecentDrawNumbers() {
   const container = document.getElementById('recentDrawNumbers');
   if (!container) return;
 
-  const countStr = localStorage.getItem('recentDrawCount');
+  // 区分地区读取期数设置
+  const countStr = localStorage.getItem(`recentDrawCount_${currentRegion}`);
   if (!countStr) {
     container.style.display = 'none';
     return;
@@ -3289,7 +3294,8 @@ function updateRecentDrawNumbers() {
     return;
   }
 
-  const storageKey = `drawRecord_${year}`;
+  // 区分地区读取开奖数据
+  const storageKey = `drawRecord_${currentRegion}_${year}`;
   let savedData = {};
   try {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -3329,7 +3335,8 @@ function updateRecentZodiacStats() {
   const container = document.getElementById('recentZodiacStats');
   if (!container) return;
 
-  const countStr = localStorage.getItem('recentDrawCount');
+  // 区分地区读取期数设置
+  const countStr = localStorage.getItem(`recentDrawCount_${currentRegion}`);
   if (!countStr) {
     container.style.display = 'none';
     return;
@@ -3351,7 +3358,8 @@ function updateRecentZodiacStats() {
     return;
   }
 
-  const storageKey = `drawRecord_${year}`;
+  // 区分地区读取开奖数据
+  const storageKey = `drawRecord_${currentRegion}_${year}`;
   let savedData = {};
   try {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -3422,7 +3430,8 @@ function updateFilterDateDrawInfo() {
   }
 
   const issueId = issueNumber.toString().padStart(2, '0');
-  const storageKey = `drawRecord_${year}`;
+  // 区分地区读取开奖数据
+  const storageKey = `drawRecord_${currentRegion}_${year}`;
   let savedData = {};
   try {
     savedData = JSON.parse(localStorage.getItem(storageKey) || '{}');
@@ -3479,4 +3488,4 @@ window.onload = async () => {
 };
 </script>
 </body>
-</html>
+</html>    
