@@ -2757,23 +2757,13 @@ function convertOrderText() {
         while (cl && !/^\d/.test(cl) && !startsWithCategory(cl)) cl = cl.substring(1).trim();
         if (!cl) return;
 
-        const op = new RegExp(`(${AMP_ORIGINAL}\\s*\\d+${AMTS})`, 'g');
-        const om = cl.match(op);
-        if (om && om.length > 0) {
-            let rl = cl;
-            om.forEach(om => {
-                const oi = rl.indexOf(om);
-                if (oi !== -1) {
-                    const cont = rl.substring(0, oi).trim();
-                    const am = om.match(/(\d+)/);
-                    if (am) {
-                        const amt = am[1];
-                        if (cont) {
-                            const jo = tokenizeAndJoin(cont);
-                            if (jo) {
-                                resultLines.push('澳门·特码：' + jo + ' 各数 ' + amt);
-                                originalContents.push(cont);
-                            }
+        const jo = tokenizeAndJoin(cl);
+        if (jo) {
+            const amtMatch = cl.match(/(\d+)\s*$/);
+            const amt = amtMatch ? amtMatch[1] : '0';
+            resultLines.push('澳门·特码：' + jo + ' 各数 ' + amt);
+            originalContents.push(cl);
+        }
                         }
                         rl = rl.substring(oi + om.length);
                     }
