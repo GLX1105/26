@@ -2721,7 +2721,7 @@ function convertOrderText() {
         }
 
         // 3. 原有特码识别逻辑（已修复：统一使用 tokenizeAndJoin）
-        const jo = tokenizeAndJoin(line);
+const jo = tokenizeAndJoin(cl);
         if (jo) {
             const amtMatch = line.match(/(\d+)\s*$/);
             const amt = amtMatch ? amtMatch[1] : '0';
