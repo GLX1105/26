@@ -2621,7 +2621,7 @@ function parseTeXiaoLine(line) {
     return final;
 }
 
-// ===== 核心：convertOrderText（修改后） =====
+// ===== 核心：convertOrderText（已修复特码识别） =====
 function convertOrderText() {
     const inputEl = document.querySelector('.source-order-input');
     const resultEl = document.getElementById('orderResult');
@@ -2720,89 +2720,13 @@ function convertOrderText() {
             return;
         }
 
-        // 3. 原有特码识别逻辑
-        const rangeFullMatch = line.match(new RegExp(`^([\\u4e00-\\u9fa5\\-]*?)(\\d{1,2})到(\\d{1,2})\\s*${AMP_ORIGINAL}\\s*(\\d+)\\s*${AMTS}$`));
-        if (rangeFullMatch) {
-            const prefix = rangeFullMatch[1].replace(/-$/, '').trim();
-            const startNum = parseInt(rangeFullMatch[2]);
-            const endNum = parseInt(rangeFullMatch[3]);
-            const amt = rangeFullMatch[4];
-            if (startNum >= 1 && startNum <= 49 && endNum >= 1 && endNum <= 49 && startNum <= endNum) {
-                const numList = [];
-                for (let i = startNum; i <= endNum; i++) numList.push(i.toString().padStart(2, '0'));
-                const expanded = numList.join('-');
-                const finalLine = prefix ? `${prefix}-${expanded}` : expanded;
-                resultLines.push('澳门·特码：' + finalLine + ' 各数 ' + amt);
-                originalContents.push(finalLine);
-                skipInvalidCheck.add(resultLines.length - 1);
-                return;
-            }
-        }
-
-        const pairMatch = line.match(SIMPLE_PAIR);
-        if (pairMatch) {
-            let num = pairMatch[1];
-            const amount = pairMatch[2];
-            if (num.length === 1) num = '0' + num;
-            resultLines.push('澳门·特码：' + num + ' 各数 ' + amount);
-            originalContents.push(pairMatch[1]);
-            return;
-        }
-
-        let cl = line;
-        allPre.forEach(p => { if (cl.startsWith(p)) cl = cl.substring(p.length).trim(); });
-        cl = cl.replace(/[^\u4e00-\u9fa5\d]+$/, '');
-        cl = cl.replace(/([一二三四五六七八九十百千]+)/g, (m) => cn2n(m));
-        while (cl && !/^[\d\u4e00-\u9fa5]/.test(cl)) cl = cl.substring(1).trim();
-        while (cl && !/^\d/.test(cl) && !startsWithCategory(cl)) cl = cl.substring(1).trim();
-        if (!cl) return;
-
-        const jo = tokenizeAndJoin(cl);
+        // 3. 原有特码识别逻辑（已修复：统一使用 tokenizeAndJoin）
+        const jo = tokenizeAndJoin(line);
         if (jo) {
-            const amtMatch = cl.match(/(\d+)\s*$/);
+            const amtMatch = line.match(/(\d+)\s*$/);
             const amt = amtMatch ? amtMatch[1] : '0';
             resultLines.push('澳门·特码：' + jo + ' 各数 ' + amt);
-            originalContents.push(cl);
-        }
-                        }
-                        rl = rl.substring(oi + om.length);
-                    }
-                }
-            });
-            if (rl.trim()) {
-                const jo = tokenizeAndJoin(rl.trim());
-                if (jo) {
-                    resultLines.push('澳门·特码：' + jo + ' 各数 0');
-                    originalContents.push(rl.trim());
-                }
-            }
-        } else {
-            const pat = new RegExp(`^(.+?)${AMP_ORIGINAL}\\s*(\\d+)$`);
-            const m = cl.match(pat);
-            if (m) {
-                const jo = tokenizeAndJoin(m[1].trim());
-                if (jo) {
-                    resultLines.push('澳门·特码：' + jo + ' 各数 ' + m[2]);
-                    originalContents.push(m[1].trim());
-                }
-            } else {
-                const sp = new RegExp(`(\\d+)(?:号|${AMP_ORIGINAL})\\s*(\\d+)$`);
-                const sm = cl.match(sp);
-                if (sm) {
-                    let num = sm[1].trim();
-                    if (parseInt(num) >= 1 && parseInt(num) <= 49) {
-                        num = num.length === 1 ? `0${num}` : num;
-                        resultLines.push('澳门·特码：' + num + ' 各数 ' + sm[2]);
-                        originalContents.push(num);
-                    }
-                } else {
-                    const jo = tokenizeAndJoin(cl);
-                    if (jo) {
-                        resultLines.push('澳门·特码：' + jo + ' 各数 0');
-                        originalContents.push(cl);
-                    }
-                }
-            }
+            originalContents.push(line);
         }
     });
 
